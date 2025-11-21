@@ -1,0 +1,101 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx} 
+\usepackage{listings}
+\usepackage{xcolor}  
+\usepackage{float}    
+
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{red},
+    commentstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true
+}
+
+\title{\textbf{Practical Work 1: TCP File Transfer}}
+\author{Group Name / Member Names \\ University of Science and Technology of Hanoi}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Protocol Design}
+In this practical work, we designed a simple file transfer protocol based on TCP/IP. The communication flow is as follows:
+
+\begin{itemize}
+    \item \textbf{Server:} Creates a socket, binds it to a port (8080), and listens for incoming connections.
+    \item \textbf{Client:} Creates a socket and connects to the server's IP address and port.
+    \item \textbf{Data Transfer:} Once connected, the client reads a file from its local disk and sends it in chunks (buffer size 1024 bytes) to the server.
+    \item \textbf{Termination:} After sending the file, the client closes the connection.
+\end{itemize}
+
+\section{System Organization}
+The system consists of two main components:
+\begin{enumerate}
+    \item \textbf{Server Application:} Acts as the passive entity, saving data as \texttt{received\_file.txt}.
+    \item \textbf{Client Application:} Acts as the active entity, sending content of \texttt{send\_me.txt}.
+\end{enumerate}
+
+\section{Implementation}
+Below are the code snippets showing the core logic using Winsock.
+
+\subsection{Server-side: Receiving Data}
+\begin{lstlisting}
+// Server receiving loop
+FILE *fp = fopen("received_file.txt", "wb");
+int valread;
+while ((valread = recv(new_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+    fwrite(buffer, 1, valread, fp);
+    memset(buffer, 0, BUFFER_SIZE);
+}
+fclose(fp);
+\end{lstlisting}
+
+\subsection{Client-side: Sending Data}
+\begin{lstlisting}
+// Client sending loop
+FILE *fp = fopen("send_me.txt", "rb");
+int bytes_read;
+while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0) {
+    send(sock, buffer, bytes_read, 0);
+    memset(buffer, 0, BUFFER_SIZE);
+}
+fclose(fp);
+\end{lstlisting}
+
+\section{Experimental Results}
+We successfully compiled and ran the code on Windows using MinGW (GCC).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{screenshot_server.png}
+    \caption{Server receiving connection}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{screenshot_client.png}
+    \caption{Client sending file}
+\end{figure}
+% -------------------------------
+
+\section{Roles and Responsibilities}
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Member Name} & \textbf{Task} \\ \hline
+Your Name & Coding Server side \& Report writing \\ \hline
+Member 2 & Coding Client side \& Testing \\ \hline
+Member 3 & Protocol Design \& Diagrams \\ \hline
+\end{tabular}
+\caption{Work distribution}
+\end{table}
+
+\end{document}
