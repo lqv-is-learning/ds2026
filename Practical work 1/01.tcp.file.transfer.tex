@@ -1,9 +1,11 @@
 \documentclass[a4paper,12pt]{article}
 \usepackage[utf8]{inputenc}
-\usepackage{graphicx} 
+\usepackage{graphicx}
 \usepackage{listings}
-\usepackage{xcolor}  
-\usepackage{float}    
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{geometry}
+\geometry{left=2.5cm, right=2.5cm, top=2cm, bottom=2cm}
 
 \lstset{
     language=C,
@@ -13,12 +15,23 @@
     commentstyle=\color{green!50!black},
     numbers=left,
     numberstyle=\tiny,
+    stepnumber=1,
     frame=single,
-    breaklines=true
+    breaklines=true,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b
 }
 
 \title{\textbf{Practical Work 1: TCP File Transfer}}
-\author{Lê Quang Vinh / 23BI14457 \\ University of Science and Technology of Hanoi}
+\author{
+    Group Name \\ 
+    \small (Member 1 Name - ID) \\
+    \small (Member 2 Name - ID) \\
+    \small (Member 3 Name - ID) \\
+    \\
+    University of Science and Technology of Hanoi
+}
 \date{\today}
 
 \begin{document}
@@ -26,76 +39,103 @@
 \maketitle
 
 \section{Protocol Design}
-In this practical work, we designed a simple file transfer protocol based on TCP/IP. The communication flow is as follows:
+In this practical work, we designed a simple file transfer protocol based on TCP/IP. The communication flow follows the standard Client-Server model using the POSIX socket API (Linux).
 
 \begin{itemize}
-    \item \textbf{Server:} Creates a socket, binds it to a port (8080), and listens for incoming connections.
-    \item \textbf{Client:} Creates a socket and connects to the server's IP address and port.
-    \item \textbf{Data Transfer:} Once connected, the client reads a file from its local disk and sends it in chunks (buffer size 1024 bytes) to the server.
-    \item \textbf{Termination:} After sending the file, the client closes the connection.
+    \item \textbf{Server State:} The server creates a socket, binds it to port \textbf{8080}, and enters the listening state waiting for connections.
+    \item \textbf{Connection:} The client creates a socket and requests a connection to the server's IP address.
+    \item \textbf{Data Exchange:} 
+    \begin{itemize}
+        \item The client opens the file \texttt{send\_me.txt} and reads it in chunks (buffer size 1024 bytes).
+        \item The client sends these chunks to the server using \texttt{send()}.
+        \item The server receives data using \texttt{read()} and writes it to \texttt{received\_file.txt}.
+    \end{itemize}
+    \item \textbf{Termination:} After the file is completely sent, the client closes the file and the socket. The server detects the end of transmission (return value 0) and closes its resources.
 \end{itemize}
 
+\begin{figure}[H]
+    \centering
+    \caption{TCP File Transfer Protocol Design}
+\end{figure}
+
 \section{System Organization}
-The system consists of two main components:
+The system is organized into two separate programs running in the terminal:
+
 \begin{enumerate}
-    \item \textbf{Server Application:} Acts as the passive entity, saving data as \texttt{received\_file.txt}.
-    \item \textbf{Client Application:} Acts as the active entity, sending content of \texttt{send\_me.txt}.
+    \item \textbf{Server Application (\texttt{server.c}):} 
+    Acts as the passive entity. It runs indefinitely (or until one transfer is done), accepts a connection, and saves the incoming data stream to a file.
+    
+    \item \textbf{Client Application (\texttt{client.c}):} 
+    Acts as the active entity. It initiates the TCP handshake, reads a local file, and streams the data to the server.
 \end{enumerate}
 
 \section{Implementation}
-Below are the code snippets showing the core logic using Winsock.
+Below are the code snippets showing the core logic of the file transfer implemented in C for the Linux environment.
 
 \subsection{Server-side: Receiving Data}
-\begin{lstlisting}
-// Server receiving loop
+We use the \texttt{read()} system call to receive data from the socket file descriptor.
+
+\begin{lstlisting}[caption={Server loop to receive and save file}]
 FILE *fp = fopen("received_file.txt", "wb");
 int valread;
-while ((valread = recv(new_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+
+// Loop to read from socket until connection is closed
+while ((valread = read(new_socket, buffer, BUFFER_SIZE)) > 0) {
     fwrite(buffer, 1, valread, fp);
     memset(buffer, 0, BUFFER_SIZE);
 }
+
 fclose(fp);
+close(new_socket);
 \end{lstlisting}
 
 \subsection{Client-side: Sending Data}
-\begin{lstlisting}
-// Client sending loop
+We use standard file I/O to read the file and \texttt{send()} to push data to the network.
+
+\begin{lstlisting}[caption={Client loop to read and send file}]
 FILE *fp = fopen("send_me.txt", "rb");
 int bytes_read;
+
+// Loop to read from file and send to socket
 while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0) {
     send(sock, buffer, bytes_read, 0);
     memset(buffer, 0, BUFFER_SIZE);
 }
+
 fclose(fp);
+close(sock);
 \end{lstlisting}
 
 \section{Experimental Results}
-We successfully compiled and ran the code on Windows using MinGW (GCC).
+We successfully compiled and ran the code on a Linux environment (Ubuntu/WSL) using the GCC compiler.
+\begin{itemize}
+    \item Compiler command: \texttt{gcc server.c -o server} and \texttt{gcc client.c -o client}
+    \item Result: The file was transferred successfully without data corruption.
+\end{itemize}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1\textwidth]{screenshot_server.png}
-    \caption{Server receiving connection}
+    \includegraphics[width=0.9\textwidth]{screenshot_server.png}
+    \caption{Server listening and receiving file on Linux}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1\textwidth]{screenshot_client.png}
-    \caption{Client sending file}
+    \includegraphics[width=0.9\textwidth]{screenshot_client.png}
+    \caption{Client connecting and sending file on Linux}
 \end{figure}
-% -------------------------------
 
 \section{Roles and Responsibilities}
 \begin{table}[H]
 \centering
-\begin{tabular}{|l|l|}
+\begin{tabular}{|p{4cm}|p{8cm}|}
 \hline
-\textbf{Member Name} & \textbf{Task} \\ \hline
-Your Name & Coding Server side \& Report writing \\ \hline
-Member 2 & Coding Client side \& Testing \\ \hline
-Member 3 & Protocol Design \& Diagrams \\ \hline
+\textbf{Member Name} & \textbf{Task Description} \\ \hline
+Member 1 (Leader) & Implementation of Server side, Makefile, and Report consolidation \\ \hline
+Member 2 & Implementation of Client side, Testing on Linux environment \\ \hline
+Member 3 & Protocol Design, System Architecture Diagram, and Debugging \\ \hline
 \end{tabular}
-\caption{Work distribution}
+\caption{Group Work Distribution}
 \end{table}
 
 \end{document}
