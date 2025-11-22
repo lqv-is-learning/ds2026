@@ -1,88 +1,78 @@
 #include <stdio.h>
-#include <winsock2.h>
-#include <ws2tcpip.h> // Thư viện bổ trợ cho địa chỉ IP
-
-// Chỉ thị cho trình biên dịch liên kết với thư viện ws2_32.lib
-#pragma comment(lib, "ws2_32.lib")
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>     
+#include <arpa/inet.h>  
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
 int main() {
-    WSADATA wsaData;
-    SOCKET server_fd, new_socket;
+    int server_fd, new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
     char buffer[BUFFER_SIZE] = {0};
-
-    // 1. Khởi tạo Winsock (Bắt buộc trên Windows)
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        printf("Khoi tao Winsock that bai.\n");
-        return 1;
+    
+    // 1. Tạo socket
+    // AF_INET: IPv4, SOCK_STREAM: TCP
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
     }
 
-    // 2. Tạo socket
-    // Lưu ý: Trên Windows dùng kiểu dữ liệu SOCKET, không phải int
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        printf("Khong the tao socket: %d\n", WSAGetLastError());
-        WSACleanup();
-        return 1;
+    // Tùy chọn: Giúp tái sử dụng cổng ngay lập tức (tránh lỗi "Address already in use")
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
     }
 
-    // Cấu hình địa chỉ
+    // Cấu hình địa chỉ server
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_addr.s_addr = INADDR_ANY; // Lắng nghe mọi IP
     address.sin_port = htons(PORT);
 
-    // 3. Bind (Gắn địa chỉ)
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == SOCKET_ERROR) {
-        printf("Bind that bai: %d\n", WSAGetLastError());
-        closesocket(server_fd);
-        WSACleanup();
-        return 1;
+    // 2. Bind (Gắn địa chỉ)
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        exit(EXIT_FAILURE);
     }
 
-    // 4. Listen (Lắng nghe)
-    if (listen(server_fd, 3) == SOCKET_ERROR) {
-        printf("Listen that bai\n");
-        closesocket(server_fd);
-        WSACleanup();
-        return 1;
+    // 3. Listen (Lắng nghe)
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        exit(EXIT_FAILURE);
     }
 
-    printf("Server dang lang nghe tren cong %d... (Windows)\n", PORT);
+    printf("Server (Linux) dang lang nghe tren cong %d...\n", PORT);
 
-    // 5. Accept (Chấp nhận kết nối)
-    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, &addrlen)) == INVALID_SOCKET) {
-        printf("Accept that bai: %d\n", WSAGetLastError());
-        closesocket(server_fd);
-        WSACleanup();
-        return 1;
+    // 4. Accept (Chấp nhận kết nối)
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+        perror("Accept failed");
+        exit(EXIT_FAILURE);
     }
-
+    
     printf("Client da ket noi!\n");
 
     // Mở file để ghi
     FILE *fp = fopen("received_file.txt", "wb");
     if (fp == NULL) {
-        perror("Loi mo file");
-        return 1;
+        perror("File open error");
+        exit(1);
     }
 
-    // 6. Nhận dữ liệu
+    // 5. Nhận dữ liệu
     int valread;
-    while ((valread = recv(new_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+    while ((valread = read(new_socket, buffer, BUFFER_SIZE)) > 0) {
         fwrite(buffer, 1, valread, fp);
         memset(buffer, 0, BUFFER_SIZE);
     }
 
     printf("Da nhan file xong.\n");
 
-    // 7. Dọn dẹp
+    // 6. Đóng kết nối
     fclose(fp);
-    closesocket(new_socket);
-    closesocket(server_fd);
-    WSACleanup(); // Giải phóng Winsock
-
+    close(new_socket);
+    close(server_fd);
     return 0;
 }
