@@ -1,0 +1,164 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx} 
+\usepackage{listings}
+\usepackage{xcolor}  
+\usepackage{float}
+\usepackage{hyperref}
+
+% Cấu hình hiển thị code Python
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{red},
+    commentstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    captionpos=b
+}
+
+\title{\textbf{Practical Work 2: RPC File Transfer}}
+\author{LÊ QUANG VINH \\ University of Science and Technology of Hanoi}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+In this practical work, we upgraded the previous file transfer system to use \textbf{RPC (Remote Procedure Call)}. 
+Instead of managing low-level sockets and data streams manually (as in TCP), RPC allows the client to invoke a function on the server as if it were a local function call.
+
+We utilized \textbf{Python's xmlrpc} library for this implementation, which abstracts the networking details and uses XML for data serialization.
+
+\section{RPC Service Design}
+The system is designed based on the Client-Server model using XML-RPC. The file transfer flow is as follows:
+
+\begin{itemize}
+    \item \textbf{Data Serialization:} Since XML-RPC is designed primarily for text, binary file data is encoded into \textbf{Base64} strings before transmission to ensure safe transport over XML.
+    \item \textbf{Server Side:} The server registers a specific function (\texttt{upload\_file}) and listens on port 8080. When called, it decodes the Base64 string back to binary and saves it to the disk.
+    \item \textbf{Client Side:} The client uses a Server Proxy (Stub) to connect to the server. It reads the local file, encodes it, and calls the remote \texttt{upload\_file} method.
+\end{itemize}
+
+\section{System Organization}
+The system consists of two main Python scripts:
+\begin{enumerate}
+    \item \textbf{rpc\_server.py:} acts as the RPC Server. It exposes the \texttt{save\_file\_rpc} logic under the name \texttt{upload\_file}.
+    \item \textbf{rpc\_client.py:} acts as the RPC Client. It reads \texttt{send\_me.txt}, performs Base64 encoding, and invokes the remote method.
+\end{enumerate}
+
+\section{Implementation}
+Below are the code snippets showing the core logic implemented in Python.
+
+\subsection{Server-side: Function Registration}
+The server defines a function to handle the file saving process and registers it with the XML-RPC server instance.
+
+\begin{lstlisting}[caption=rpc\_server.py]
+import xmlrpc.server
+import base64
+import os
+
+# Server Configuration
+PORT = 8080
+ADDRESS = ("localhost", PORT)
+
+def save_file_rpc(filename, file_data_base64):
+    """
+    Receives filename and base64 encoded data from client.
+    Decodes and saves the file.
+    """
+    try:
+        file_data = base64.b64decode(file_data_base64)
+        output_name = "received_" + filename
+        with open(output_name, "wb") as handle:
+            handle.write(file_data)
+            
+        print(f"Sent file: {filename} -> Saved: {output_name}")
+        return "Upload Successfully!"
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return "Upload Failed!"
+
+def start_server():
+    print(f"RPC Server is running at port {PORT}...")
+    with xmlrpc.server.SimpleXMLRPCServer(ADDRESS, allow_none=True) as server:
+        server.register_introspection_functions()
+        server.register_function(save_file_rpc, "upload_file")
+        server.serve_forever()
+
+if __name__ == "__main__":
+    start_server()
+\end{lstlisting}
+
+\subsection{Client-side: Remote Procedure Call}
+The client connects to the server using a proxy, encodes the file content, and makes the remote call.
+
+\begin{lstlisting}[caption=rpc\_client.py]
+import xmlrpc.client
+import base64
+import os
+
+PORT = 8080
+SERVER_URL = f"http://localhost:{PORT}/"
+FILENAME = "send_me.txt"
+
+def send_file_rpc():
+    # 1. Connect to Server (Stub)
+    proxy = xmlrpc.client.ServerProxy(SERVER_URL)
+    
+    if not os.path.exists(FILENAME):
+        print(f"Cannot found file '{FILENAME}'")
+        return
+
+    print(f"Connect to RPC Server at {SERVER_URL}...")
+
+    # 2. Read and Encode file
+    with open(FILENAME, "rb") as handle:
+        binary_data = handle.read()
+        encoded_data = base64.b64encode(binary_data).decode("utf-8")
+
+    # 3. Call remote function
+    print(f"Loading file '{FILENAME}'...")
+    try:
+        result = proxy.upload_file(FILENAME, encoded_data)
+        print("Server received:", result)
+    except ConnectionRefusedError:
+        print("Cannot connect to RPC Server. Is it running?")
+
+if __name__ == "__main__":
+    send_file_rpc()
+\end{lstlisting}
+
+\section{Experimental Results}
+We successfully implemented the RPC file transfer. Below are the screenshots of the execution.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{rpc_server.png}
+    \caption{Server output showing file reception and saving}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{rpc_client.png}
+    \caption{Client output showing successful connection and upload}
+\end{figure}
+
+The file \texttt{send\_me.txt} containing "HelloWorld!!!" was successfully transferred and saved as \texttt{received\_send\_me.txt} on the server side.
+
+\section{Roles and Responsibilities}
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Member Name} & \textbf{Task} \\ \hline
+LÊ QUANG VINH & Coding, Testing \& Report Writing \\ \hline
+\end{tabular}
+\caption{Work distribution}
+\end{table}
+
+\end{document}
