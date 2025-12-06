@@ -1,0 +1,129 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx} 
+\usepackage{listings}
+\usepackage{xcolor}  
+\usepackage{float}
+\usepackage{hyperref}
+
+% Cấu hình hiển thị code Python
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{red},
+    commentstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    captionpos=b
+}
+
+\title{\textbf{Practical Work 3: MPI File Transfer}}
+\author{LÊ QUANG VINH \\ University of Science and Technology of Hanoi}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+In this practical work, we explore \textbf{Message Passing Interface (MPI)}, a standard for parallel computing. The goal is to transfer a file between two distinct processes (ranks) within a communicator group.
+
+We selected \textbf{OpenMPI} combined with the \textbf{mpi4py} Python library on a \textbf{Linux} environment.
+\begin{itemize}
+    \item \textbf{Why OpenMPI?} It is a high-performance, open-source MPI implementation that is widely used and highly compatible with Linux systems.
+    \item \textbf{Why mpi4py?} It provides a Pythonic interface to MPI, handling object serialization (pickling) automatically, which simplifies the implementation of file transfer logic compared to low-level C/C++ bindings.
+\end{itemize}
+
+\section{System Design}
+The system relies on the \texttt{MPI.COMM\_WORLD} communicator. We utilize two processes:
+\begin{itemize}
+    \item \textbf{Rank 0 (Sender):} Reads the file from the disk and sends the binary data using \texttt{comm.send()}.
+    \item \textbf{Rank 1 (Receiver):} Waits for incoming data using \texttt{comm.recv()} and writes the received bytes to a new file.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \begin{verbatim}
+    +----------------+                       +----------------+
+    |   Process 0    |   (MPI Channel)       |   Process 1    |
+    |    (Sender)    | --------------------> |   (Receiver)   |
+    | Reads "input"  |      comm.send        | Writes "output"|
+    +----------------+                       +----------------+
+    \end{verbatim}
+    \caption{MPI Point-to-Point Communication Design}
+\end{figure}
+
+\section{Implementation}
+Below is the core logic for the file transfer using blocking point-to-point communication.
+
+\begin{lstlisting}[caption=mpi\_transfer.py]
+from mpi4py import MPI
+import os
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+TAG_DATA = 11
+
+def sender():
+    filename = "send_me.txt"
+    if not os.path.exists(filename):
+        print(f"[Rank {rank}] Error: File not found.")
+        return
+        
+    # Read file binary
+    with open(filename, "rb") as f:
+        data = f.read()
+        
+    print(f"[Rank {rank}] Sending {len(data)} bytes to Rank 1...")
+    # Blocking send to Rank 1
+    comm.send(data, dest=1, tag=TAG_DATA)
+    print(f"[Rank {rank}] Send complete.")
+
+def receiver():
+    print(f"[Rank {rank}] Waiting for data...")
+    # Blocking receive from Rank 0
+    data = comm.recv(source=0, tag=TAG_DATA)
+    
+    # Write to new file
+    output_name = "received_via_mpi.txt"
+    with open(output_name, "wb") as f:
+        f.write(data)
+    print(f"[Rank {rank}] Received {len(data)} bytes.")
+    print(f"[Rank {rank}] Saved as '{output_name}'. Success!")
+
+if rank == 0:
+    sender()
+elif rank == 1:
+    receiver()
+\end{lstlisting}
+
+\section{Experimental Results}
+The program was executed on Linux using the command:
+\begin{verbatim}
+mpirun -n 2 python3 mpi_transfer.py
+\end{verbatim}
+
+Rank 0 successfully read \texttt{send\_me.txt} (containing 14 bytes) and transmitted it to Rank 1. Rank 1 received the data and saved it as \texttt{received\_via\_mpi.txt}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{mpi_file_transfer.png}
+    \caption{Execution result showing successful transfer between Rank 0 and Rank 1}
+\end{figure}
+
+\section{Roles and Responsibilities}
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Member Name} & \textbf{Task} \\ \hline
+LÊ QUANG VINH & Implementation, MPI Setup (Linux) \& Report \\ \hline
+\end{tabular}
+\caption{Work distribution}
+\end{table}
+
+\end{document}
